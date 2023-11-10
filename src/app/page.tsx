@@ -1,95 +1,93 @@
-import Image from 'next/image'
-import styles from './page.module.css'
+'use client'
+
+import { io } from 'socket.io-client'
+import { useEffect, useState } from 'react'
 
 export default function Home() {
+
+  const socket = io(`${process.env.NEXT_PUBLIC_WS_URI}`)
+  const [messages, setMessages] = useState<any>([])
+  const [body, setBody] = useState('')
+  const [joined, setJoined] = useState(false)
+  const [typingTimeout, setTypingTimeout] = useState<any>()
+  const [typingDisplay, setTypingDisplay] = useState('')
+  const store_id = process.env.NEXT_PUBLIC_STORE_ID
+  const buyer_id = process.env.NEXT_PUBLIC_BUYER_ID
+
+  // to join room. it will be a on page load event in the app implementation
+  const join = () => {
+    socket.emit('join', { id: buyer_id, type: 'buyer' }, () => {
+      setJoined(true)
+    })
+  }
+
+  const getAllBuyerMessage = () => {
+    socket.emit('getAllBuyerMessages', { id: buyer_id }, (response: any) => {
+      setMessages(response)
+    })
+  }
+
+  // To get messages
+  useEffect(() => {
+
+    join()
+    getAllBuyerMessage()
+
+  }, [])
+
+  useEffect(() => { console.log(messages) }, [messages])
+
+  // to update the ui with new messages 
+  useEffect(() => {
+    socket.on('message', message => {
+      getAllBuyerMessage()
+    })
+  })
+
+  useEffect(() => {
+    socket.on('typing', ({ id, isTyping }) => {
+      if (isTyping) {
+        setTypingDisplay(`${id} is typing...`)
+      } else {
+        setTypingDisplay('')
+      }
+    })
+  })
+
+  const emitTyping = () => {
+    socket.emit('typing', { isTyping: true })
+
+    setTypingTimeout(setTimeout(() => {
+      socket.emit('typing', { isTyping: false })
+    }, 2000))
+  }
+
+
+  // to send new message
+  const sendMessage = (e: any) => {
+    e.preventDefault()
+    socket.emit('createMessage', { buyer_id, store_id, sender_id: buyer_id, body }, (response: any) => {
+      setBody('')
+    })
+  }
+
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>src/app/page.tsx</code>
-        </p>
+    <main >
+      {messages &&
         <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
-
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore the Next.js 13 playground.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
+          {messages.map((message: any, index: number) => (
+            <div key={index}>
+              {message?.texts?.map((text: any, index: number) => (
+                <p key={index}>[{text.sender_name}]:{text.body}</p>
+              ))}
+            </div>
+          ))}
+        </div>}
+      {typingDisplay && <p>{typingDisplay}</p>}
+      <form onSubmit={sendMessage}>
+        <input type="text" placeholder='type your message' value={body} onChange={(e) => setBody(e.target.value)} />
+        <button type='submit'>Send</button>
+      </form>
     </main>
   )
 }
